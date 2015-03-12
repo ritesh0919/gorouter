@@ -1,14 +1,20 @@
 package main
 
 import (
+	"encoding/json"
+	"math"
+	"net/http"
+
 	"github.com/apcera/nats"
 	cf_debug_server "github.com/cloudfoundry-incubator/cf-debug-server"
+	"github.com/cloudfoundry-incubator/routing-api/db"
 	"github.com/cloudfoundry/dropsonde"
 	"github.com/cloudfoundry/gorouter/access_log"
 	vcap "github.com/cloudfoundry/gorouter/common"
 	"github.com/cloudfoundry/gorouter/config"
 	"github.com/cloudfoundry/gorouter/proxy"
 	rregistry "github.com/cloudfoundry/gorouter/registry"
+	"github.com/cloudfoundry/gorouter/route"
 	"github.com/cloudfoundry/gorouter/router"
 	rvarz "github.com/cloudfoundry/gorouter/varz"
 	steno "github.com/cloudfoundry/gosteno"
@@ -18,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -81,6 +88,20 @@ func main() {
 
 	registry := rregistry.NewRouteRegistry(c, natsClient)
 
+	for i, endpoint := range c.RoutingAPI.Hosts {
+		registry.Register(
+			route.Uri(c.RoutingAPI.Route),
+			route.NewEndpoint(
+				"routing-api-"+strconv.Itoa(i),
+				endpoint.Address,
+				endpoint.Port,
+				"routing-api-"+strconv.Itoa(i),
+				map[string]string{},
+				math.MaxInt64,
+			),
+		)
+	}
+
 	varz := rvarz.NewVarz(registry)
 
 	accessLogger, err := access_log.CreateRunningAccessLogger(c)
@@ -111,6 +132,51 @@ func main() {
 	errChan := router.Run()
 
 	logger.Info("gorouter.started")
+
+	go func() {
+		client := new(http.Client)
+
+		for {
+			request, _ := http.NewRequest("GET", "", nil)
+
+			// get uaa token...
+			// or curl with password routing api directly
+
+			request.Header.Add("Authorization", "bearer ")
+			request.Host = c.RoutingAPI.Route
+			request.URL.Scheme = "http"
+			request.URL.Path = "/v1/routes"
+			request.URL.Host = c.Ip + ":" + strconv.Itoa(int(c.Port))
+
+			response, err := client.Do(request)
+			if err != nil {
+				logger.Errorf("Could not update routing api routes: %+v\n", err)
+			} else {
+				decoder := json.NewDecoder(response.Body)
+
+				var routes []db.Route
+				err := decoder.Decode(&routes)
+				if err != nil {
+					logger.Errorf("Bad response from routing api routes: %+v\n", err)
+				} else {
+					for _, r := range routes {
+						registry.Register(
+							route.Uri(r.Route),
+							route.NewEndpoint(
+								r.LogGuid,
+								r.IP,
+								uint16(r.Port),
+								r.LogGuid,
+								map[string]string{},
+								120,
+							),
+						)
+					}
+				}
+			}
+			time.Sleep(60 * time.Second)
+		}
+	}()
 
 	select {
 	case err := <-errChan:

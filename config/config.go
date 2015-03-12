@@ -58,6 +58,21 @@ var defaultLoggingConfig = LoggingConfig{
 	MetronAddress: "localhost:3457",
 }
 
+type RoutingAPIConfig struct {
+	Route string       `yaml:"route"`
+	Hosts []HostConfig `yaml:"hosts"`
+}
+
+type HostConfig struct {
+	Address string `yaml:"address"`
+	Port    uint16 `yaml:"port"`
+}
+
+type UAAConfig struct {
+	ClientName   string `yaml:"client_name"`
+	ClientSecret string `yaml:"client_secret"`
+}
+
 type Config struct {
 	Status  StatusConfig  `yaml:"status"`
 	Nats    []NatsConfig  `yaml:"nats"`
@@ -96,6 +111,9 @@ type Config struct {
 	EndpointTimeout            time.Duration `yaml:"-"`
 	DrainTimeout               time.Duration `yaml:"-"`
 	Ip                         string        `yaml:"-"`
+
+	RoutingAPI RoutingAPIConfig `yaml:"routing_api"`
+	UAA        UAAConfig        `yaml:"uaa"`
 }
 
 var defaultConfig = Config{

@@ -12,11 +12,14 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gbytes"
 	. "github.com/onsi/gomega/gexec"
+	"github.com/onsi/gomega/ghttp"
 	"github.com/pivotal-golang/localip"
 
 	"io"
 	"net"
 	"net/url"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"encoding/json"
@@ -345,6 +348,79 @@ var _ = Describe("Router Integration", func() {
 
 		waitTime := staleCheckInterval + staleThreshold + 5*time.Second
 		Eventually(zombieGone, waitTime.Seconds()).Should(Receive())
+	})
+
+	It("has references to the routing api", func() {
+		server1 := ghttp.NewServer()
+		server1.AppendHandlers(ghttp.VerifyRequest("GET", "/v1/routes"))
+		server1Port, _ := strconv.Atoi(strings.Split(server1.Addr(), ":")[1])
+		defer server1.Close()
+
+		server2 := ghttp.NewServer()
+		server2.AppendHandlers(ghttp.VerifyRequest("GET", "/v1/routes"))
+		server2Port, _ := strconv.Atoi(strings.Split(server2.Addr(), ":")[1])
+		defer server2.Close()
+
+		cfgFile := filepath.Join(tmpdir, "config.yml")
+		statusPort := test_util.NextAvailPort()
+		proxyPort := test_util.NextAvailPort()
+		c := createConfig(cfgFile, statusPort, proxyPort)
+		c.RoutingAPI.Route = "routing-api.127.0.0.1.xip.io"
+		c.RoutingAPI.Hosts = []config.HostConfig{
+			{
+				Address: "127.0.0.1",
+				Port:    uint16(server1Port),
+			},
+			{
+				Address: "127.0.0.1",
+				Port:    uint16(server2Port),
+			},
+		}
+		writeConfig(c, cfgFile)
+
+		gorouterSession = startGorouterSession(cfgFile)
+		Eventually(func() int {
+			return len(server1.ReceivedRequests()) + len(server2.ReceivedRequests())
+		}).Should(Equal(1))
+	})
+
+	It("polls the routing api for new routes", func() {
+		server := ghttp.NewServer()
+		server.AppendHandlers(ghttp.VerifyRequest("GET", "/"))
+		serverPort, _ := strconv.Atoi(strings.Split(server.Addr(), ":")[1])
+		defer server.Close()
+
+		routingAPI := ghttp.NewServer()
+		routingAPI.AppendHandlers(
+			ghttp.CombineHandlers(
+				ghttp.VerifyRequest("GET", "/v1/routes"),
+				ghttp.RespondWith(http.StatusOK, `[
+				{"route":"da-route.127.0.0.1.xip.io","ip":"127.0.0.1", "port": `+strconv.Itoa(serverPort)+`}
+				]`),
+			),
+		)
+		routingAPIPort, _ := strconv.Atoi(strings.Split(routingAPI.Addr(), ":")[1])
+		defer routingAPI.Close()
+
+		cfgFile := filepath.Join(tmpdir, "config.yml")
+		statusPort := test_util.NextAvailPort()
+		proxyPort := test_util.NextAvailPort()
+		c := createConfig(cfgFile, statusPort, proxyPort)
+		c.RoutingAPI.Route = "routing-api.127.0.0.1.xip.io"
+		c.RoutingAPI.Hosts = []config.HostConfig{
+			{
+				Address: "127.0.0.1",
+				Port:    uint16(routingAPIPort),
+			},
+		}
+		writeConfig(c, cfgFile)
+
+		gorouterSession = startGorouterSession(cfgFile)
+		Eventually(func() error {
+			_, err := http.Get("http://da-route.127.0.0.1.xip.io:" + strconv.Itoa(int(proxyPort)))
+			return err
+		}).ShouldNot((HaveOccurred()))
+		Eventually(server.ReceivedRequests).Should(HaveLen(1))
 	})
 })
 

@@ -312,5 +312,36 @@ endpoint_timeout: 10
 				Ω(config.DrainTimeout).To(Equal(10 * time.Second))
 			})
 		})
+
+		Describe("Routing api", func() {
+			It("Sets the list of routing APIs", func() {
+				var c = []byte(`
+routing_api:
+  route: "route.to.routing.api.server"
+  hosts:
+    - address: 127.0.0.1
+      port: 8080
+`)
+
+				config.Initialize(c)
+				config.Process()
+
+				Expect(config.RoutingAPI.Route).To(Equal("route.to.routing.api.server"))
+				Expect(config.RoutingAPI.Hosts[0].Address).To(Equal("127.0.0.1"))
+				Expect(config.RoutingAPI.Hosts[0].Port).To(Equal(uint16(8080)))
+			})
+
+			It("Sets the uaa client secret password", func() {
+				var c = []byte(`
+uaa:
+  client_name: gorouter
+  client_secret: gorouter-secret
+`)
+				config.Initialize(c)
+				config.Process()
+
+				Expect(config.UAA.ClientSecret).To(Equal("gorouter-secret"))
+			})
+		})
 	})
 })
