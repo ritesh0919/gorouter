@@ -138,10 +138,6 @@ func main() {
 
 		for {
 			request, _ := http.NewRequest("GET", "", nil)
-
-			// get uaa token...
-			// or curl with password routing api directly
-
 			request.Header.Add("Authorization", "bearer ")
 			request.Host = c.RoutingAPI.Route
 			request.URL.Scheme = "http"
