@@ -68,9 +68,9 @@ var _ = Describe("Proxy", func() {
 		x.CheckLine("HTTP/1.0 200 OK")
 	})
 
-	FIt("responds to http/1.0 with path/path", func() {
-		ln := registerHandler(r, "test/my path/foo", func(x *test_util.HttpConn) {
-			x.CheckLine("GET /my_path/your%20path/foo HTTP/1.1")
+	It("responds to http/1.0 with path/path", func() {
+		ln := registerHandler(r, "test/my%20path/your_path", func(x *test_util.HttpConn) {
+			x.CheckLine("GET /my%20path/your_path HTTP/1.1")
 
 			x.WriteLines([]string{
 				"HTTP/1.1 200 OK",
@@ -82,7 +82,7 @@ var _ = Describe("Proxy", func() {
 		x := dialProxy(proxyServer)
 
 		x.WriteLines([]string{
-			"GET /my_path/your%20path/foo HTTP/1.0",
+			"GET /my%20path/your_path HTTP/1.0",
 			"Host: test",
 		})
 
