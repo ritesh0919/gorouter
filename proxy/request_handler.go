@@ -234,6 +234,7 @@ func (h *RequestHandler) setupRequest(endpoint *route.Endpoint) {
 	h.setRequestXForwardedFor()
 	setRequestXRequestStart(h.request)
 	setRequestXVcapRequestId(h.request, h.logger)
+	h.request.Header.Set("Connection", "Keep-Alive")
 }
 
 func (h *RequestHandler) setRequestURL(addr string) {

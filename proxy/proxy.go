@@ -81,7 +81,7 @@ func NewProxy(args ProxyArgs) Proxy {
 				}
 				return conn, err
 			},
-			DisableKeepAlives:  true,
+			DisableKeepAlives:  false,
 			DisableCompression: true,
 		},
 		secureCookies: args.SecureCookies,
